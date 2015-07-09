@@ -1,0 +1,29 @@
+package alugoplus;
+
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
+
+public class CheckCP implements SelectionListener {
+	int[] retv = new int[2];
+	
+	public CheckCP(int i, int j) {
+		// TODO 自動生成されたコンストラクター・スタブ
+		retv[0] = i;
+		retv[1] = j;
+	}
+
+	@Override
+	public void widgetDefaultSelected(SelectionEvent arg0) {
+		// TODO 自動生成されたメソッド・スタブ
+
+	}
+
+	@Override
+	public void widgetSelected(SelectionEvent arg0) {
+		if( !Player.isclicked ){
+			Player.isclicked = true;
+			Player.retvCP = retv;
+		}
+	}
+
+}
