@@ -1,0 +1,22 @@
+package alugoplus;
+
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
+import org.eclipse.swt.widgets.Text;
+
+public class CheckText implements SelectionListener {
+
+	@Override
+	public void widgetDefaultSelected(SelectionEvent e) {
+		Text textfield = (Text) e.widget;
+		JabberClient.tmpText = textfield.getText();
+		JabberClient.shell.dispose();
+	}
+
+	@Override
+	public void widgetSelected(SelectionEvent arg0) {
+		// TODO 自動生成されたメソッド・スタブ
+
+	}
+
+}
