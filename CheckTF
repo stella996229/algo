@@ -1,0 +1,22 @@
+package alugoplus;
+
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
+
+public class CheckTF implements SelectionListener{
+	boolean retb;
+	
+	public void widgetSelected(SelectionEvent se){
+		Player.retb = retb;
+		Player.messageWindow.close();
+	}
+
+	@Override
+	public void widgetDefaultSelected(SelectionEvent arg0) {
+
+	}
+	
+	public CheckTF(boolean b){
+		retb = b;
+	}
+}
