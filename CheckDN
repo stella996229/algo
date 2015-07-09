@@ -1,0 +1,23 @@
+package alugoplus;
+
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
+import org.eclipse.swt.widgets.List;
+
+public class CheckDN implements SelectionListener {
+
+	@Override
+	public void widgetDefaultSelected(SelectionEvent e) {
+
+	}
+
+	@Override
+	public void widgetSelected(SelectionEvent e) {
+		// TODO 自動生成されたメソッド・スタブ
+		List list = (List) e.widget;
+		Player.retDN = list.getSelectionIndex();
+		Player.dnWindow.dispose();
+
+	}
+
+}
