@@ -1,0 +1,5 @@
+package alugoplus;
+
+public class csEmptyException extends Exception {
+
+}
