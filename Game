@@ -1,0 +1,497 @@
+package alugoplus;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+public class Game {
+	/**山札*/
+	CardStack cs;
+	JabberServer js;
+
+	/**プレイヤーの人数*/
+	int nop;
+	/**使用するカードの色の種類*/
+	int nocolor;
+	/**使用するカードの数字がnonum種類*/
+	int nonum;
+
+	/**マジックカードの総枚数*/
+	int nomc;
+
+	/**アクティブプレイヤー*/
+	int acplayer;
+
+	/** Gameクラスが内部で持つ手札、Playerクラスの手札と常に同期を取る*/
+	Card[][] hand;
+	/**hand[][]のどこまでカードが入っているかを示し、ソート範囲を制限する 0~入っている枚数-1*/
+	int[] handptr;
+
+	/**プレイヤーが推理に参加できるか*/
+	boolean[] isLiving;
+
+	/**1人あたりの初期手札の枚数*/
+	int firstcard;
+
+	/**
+	 * ゲームを初期化するメソッド。
+	 */
+	public void initializeGame(){
+		nocolor = 4;
+		nop = 4; /*一時的に1としておく*/
+		nonum = 12;
+		nomc = 4;
+		firstcard = 6-nop;
+
+		if(nocolor * nonum <= firstcard){
+			System.out.println("Too few card to start game.");
+			System.exit(-1);
+		}
+
+		cs = new CardStack(nocolor, nonum, nomc, firstcard*nop);
+		hand = new Card[nop][nocolor*nonum];
+		handptr = new int[nop];
+
+		isLiving = new boolean[nop];
+		for(int i=0; i<nop; i++){
+			isLiving[i] = true;
+		}
+	}
+
+
+	/**
+	 * 初期手札の配布
+	 */
+	public void dealFirstHand() {
+		/*初期カードにマジックカードを配らない*/
+		int tmp = nomc;
+		nomc = 0;
+
+		for(int i=0; i<nop; i++) {
+			for(int j=0; j<firstcard; j++) {
+				try{
+					hand[i][j] = cs.getCard();
+				}catch( csEmptyException csee){
+					/*対処はinitialize()ですんでいる*/
+				}
+			}
+		}
+
+		for(int i=0; i<nop; i++){
+			handptr[i] = firstcard-1;
+			Arrays.sort(hand[i], 0, handptr[i]+1);
+		}
+
+		nomc = tmp;
+	}
+
+
+	/**
+	 * 推理に使ったカードを挿入するメソッド。
+	 * @param[in] c 挿入するカード
+	 * @param[in] p カードを加えるプレイヤー
+	 * @return カードを挿入した位置 1 ~ handptr[p]+1
+	 */
+	public int insertCard(Card c, int p){
+		int pos=0;
+		handptr[p]++;
+		hand[p][handptr[p]] = c;
+
+		Arrays.sort(hand[p], 0, handptr[p]+1);
+		pos = Arrays.binarySearch(hand[p], 0, handptr[p], c);
+		return pos+1;
+	}
+
+	/**
+	 * 山札がない時、手札のカードを使うために手札からカードを削除するメソッド
+	 * @param[in] pos 削除するカードの位置(openなカードは受け取らない前提)
+	 * @param[in] p 削除するプレイヤー
+	 */
+	public void deleteCard(int pos, int p){
+		hand[p][pos] = hand[p][handptr[p]];
+		handptr[p]--;
+
+		Arrays.sort(hand[p], 0, handptr[p]+1);
+	}
+
+	/**
+	 *
+	 * @return ゲームが続く場合はfalse
+	 */
+	private boolean isFinGame(){
+		int count = 0;
+		boolean flag;
+		for(int i=0; i < nop; i++){
+			flag = false;
+			if( !isLiving[i] ){
+				count++;
+			}else{
+				for(int j=0; j<handptr[i]+1; j++){
+					if( !hand[i][j].isopen ){
+						flag = true;
+						break;
+					}
+				}
+				if( !flag ){
+					isLiving[i] = false;
+					count++;
+				}
+			}
+		}
+
+		if(count < nop-1) return false;
+		else return true;
+	}
+
+
+	private void mainloop(){
+		initializeGame();
+		/*サーバー立ち上げ*/
+		js = new JabberServer(this);
+
+		try{
+			/*クライアントとの接続を確立*/
+			js.startConnection();
+		}catch(IOException ioe){
+			System.out.println("Failed to start game by:"+ ioe);
+			System.exit(-1);
+		}
+		/*クライアントの初期化*/
+		js.initialize();
+
+		dealFirstHand();
+
+		/*ゲーム本体の開始*/
+		acplayer = 0;
+		Card tmpc;
+
+		try{
+			for(int i = 0; i < nop; i++){
+				js.sendLog("あなたのプレイヤー番号は"+ i +"です", i);
+			}
+		}catch(IOException ioe){
+			System.out.println("Failed to start game by:"+ ioe);
+			System.exit(-1);
+		}
+
+		try {
+			for(;;){
+				tmpc = cs.getCard();
+				/*山札が残っているかを通知*/
+				for(int i=0; i<nop; i++){
+					js.sendControlMessage(true, i);
+				}
+
+				js.dataDistribution();
+
+				if(tmpc.color != Card.PURPLE){
+					/**** 数字カードを引いた場合****/
+					for(int i=0; i<nop; i++){
+						js.sendControlMessage(true, i);
+					}
+
+					js.sendCardData(tmpc, acplayer);
+
+					/*推理を続ける場合用にループにする*/
+					for(;;){
+
+						int[] detv = js.getDetection(acplayer);
+
+						/**** 推理を共有 ****/
+						String tmps = "プレイヤー"+ acplayer +"がプレイヤー"+ detv[0] +"の "
+							+ ordinal(detv[1]) +"のカードは"+ hand[detv[0]][detv[1]].retColor() +"の"
+							+ detv[2] +"だと推理しました";
+						/*推理の内容を放送*/
+						for(int i=0; i<nop; i++) js.sendLog(tmps, i);
+
+						if( hand[detv[0]][detv[1]].number == detv[2] ){
+							/**** 推理正解時 ****/
+							hand[detv[0]][detv[1]].isopen = true;
+
+							for(int i=0; i<nop; i++){
+								js.sendLog("推理は正解です", i);
+								/*メッセージa、推理成功を通知*/
+								js.sendControlMessage(true, i);
+							}
+
+							if( isFinGame() ){
+								/*生存者1人によるゲーム終了処理*/
+								int i;
+								for(i=0; i<nop; i++){
+									if(isLiving[i] == true) break;
+								}
+								for(int j=0; j<nop; j++){
+									js.sendControlMessage(false, j);
+									js.sendLog("ゲームは終了しました", j);
+									js.sendLog("勝者はプレイヤー"+ i +"です", j);
+								}
+
+								/*ハンドシェイクで終了処理*/
+								for(int j=0; j<nop; j++){
+									js.getCM(j);
+								}
+
+								System.exit(1);
+
+							}
+							/*ゲームが続くことの通知*/
+							for(int i=0; i<nop; i++){
+								js.sendControlMessage(true, i);
+							}
+
+							/*推理を続けるかどうか*/
+							boolean cflag = js.getCM(acplayer);
+							if(cflag){
+								/**** 推理を続ける ****/
+								for(int i=0; i<nop; i++){
+									/*メッセージb、継続を通知*/
+									js.sendControlMessage(true, i);
+									js.sendLog("プレイヤー"+ acplayer +"は推理を続けます", i);
+								}
+								js.dataDistribution();
+								continue;
+
+							}else{
+								/**** 推理をやめる ****/
+								int tmp = insertCard(tmpc, acplayer);
+								tmps = "今引いたカードは手札の"+ ordinal(tmp) +"に入りました";
+
+								for(int i=0; i<nop; i++){
+									/*メッセージb、推理終了を通知*/
+									js.sendControlMessage(false, i);
+									js.sendLog("プレイヤー"+ acplayer +"は推理を終えます", i);
+									js.sendLog(tmps, i);
+								}
+
+								/*ターン終了*/
+								break;
+							}
+
+						}else{
+							/**** 推理失敗時 ****/
+							tmpc.isopen = true;
+							int tmp = insertCard(tmpc, acplayer);
+
+							tmps = "今引いたカードは手札の"+ ordinal(tmp) +"に入りました";
+
+							for(int i=0; i<nop; i++){
+								js.sendLog("推理は不正解です", i);
+
+								/*メッセージa、推理失敗を通知*/
+								js.sendControlMessage(false, i);
+								js.sendLog(tmps, i);
+							}
+							/*ターン終了*/
+							break;
+						}
+					}
+				}else{
+					/**** マジックカードを引いた場合 ****/
+					for(int i=0; i<nop; i++){
+						js.sendControlMessage(false, i);
+					}
+					int[] tmpv = js.getMazic(acplayer);
+					String tmps = "マジックカードでプレイヤー"+ tmpv[0] +"の"+ ordinal(tmpv[1]) +"の";
+					tmps = tmps + "カードを調べました";
+					js.sendLog(tmps, acplayer);
+
+					tmps = "調べたカードの数字は"+ hand[tmpv[0]][tmpv[1]].number +"です";
+					js.sendLog(tmps, acplayer);
+
+				}
+
+				/*改行を入れておく*/
+				for(int i=0; i<nop; i++){
+					js.sendLog("", i);
+				}
+
+				acplayer = (acplayer+1)%nop;
+
+			}
+		}catch (csEmptyException e) {
+
+			/**** 山札がなくなった後の処理 ****/
+
+			for(int i=0; i<nop; i++){
+				js.sendControlMessage(false, i);
+			}
+
+			try{
+				for(;;){
+					js.dataDistribution();
+
+					/*メッセージcc*/
+					int[] retv = js.getMazic(acplayer);
+
+					tmpc = hand[retv[0]][retv[1]];
+					deleteCard(retv[1], retv[0]);
+
+
+					for(;;){
+
+						int[] detv = js.getDetection(acplayer);
+
+						/**** 推理を共有 ****/
+						String tmps = "プレイヤー"+ acplayer +"は、プレイヤー"+ detv[0] +"の"
+						+ ordinal(detv[1]) +"のカードは"+ hand[detv[0]][detv[1]].retColor() +"の"
+						+ detv[2] +"だと推理しました";
+
+						/*推理を放送*/
+						for(int i=0; i<nop; i++) js.sendLog(tmps, i);
+
+						if( hand[detv[0]][detv[1]].number == detv[2] ){
+							/**** 推理正解時 ****/
+							hand[detv[0]][detv[1]].isopen = true;
+
+							for(int i=0; i<nop; i++){
+								js.sendLog("推理は正解です", i);
+								/*メッセージa、推理成功を通知*/
+								js.sendControlMessage(true, i);
+							}
+
+							int tmp = insertCard(tmpc, acplayer);
+
+							if( isFinGame() ){
+								/*生存者1人によるゲーム終了処理*/
+								int i;
+								for(i=0; i<nop; i++){
+									if(isLiving[i] == true) break;
+								}
+								for(int j=0; j<nop; j++){
+									js.sendControlMessage(false, j);
+									js.sendLog("ゲームは終了しました", j);
+									js.sendLog("勝者はプレイヤー"+ i +"です", j);
+								}
+
+								/*ハンドシェイクで終了処理*/
+								for(int j=0; j<nop; j++){
+									js.getCM(j);
+								}
+								System.exit(1);
+							}
+
+							/*ゲームが続くことの通知*/
+							for(int i=0; i<nop; i++){
+								js.sendControlMessage(true, i);
+							}
+
+							/*推理を続けるかどうか*/
+							boolean cflag = js.getCM(acplayer);
+							if(cflag){
+								/**** 推理を続ける ****/
+								for(int i=0; i<nop; i++){
+									/*メッセージb、継続を通知*/
+
+									js.sendControlMessage(true, i);
+									js.sendLog("プレイヤー"+ acplayer +"は推理を続けます", i);
+								}
+								js.dataDistribution();
+
+								deleteCard(tmp-1, acplayer);
+								continue;
+
+							}else{
+								/**** 推理をやめる ****/
+								for(int i=0; i<nop; i++){
+									/*メッセージb、推理終了を通知*/
+									js.sendControlMessage(false, i);
+									js.sendLog("プレイヤー"+ acplayer +"は推理を終えます", i);
+								}
+
+								/*ターン終了*/
+								break;
+							}
+
+						}else{
+							/**** 推理失敗時 ****/
+							tmpc.isopen = true;
+							int tmp = insertCard(tmpc, acplayer);
+
+							tmps = "プレイヤー"+ acplayer +"の"+ ordinal(tmp) +"のカードが開きました";
+
+							for(int i=0; i<nop; i++){
+								js.sendLog("推理は不正解です", i);
+								/*メッセージa、推理失敗を通知*/
+								js.sendControlMessage(false, i);
+							}
+
+							if( isFinGame() ){
+								/*生存者1人によるゲーム終了処理*/
+								int k;
+								for(k=0; k<nop; k++){
+									if(isLiving[k] == true) break;
+								}
+								for(int j=0; j<nop; j++){
+									js.sendControlMessage(false, j);
+									js.sendLog("ゲームが終了しました", j);
+									js.sendLog("勝者はプレイヤー"+ k +"です", j);
+								}
+								/*ハンドシェイクで終了処理*/
+								for(int j=0; j<nop; j++){
+									js.getCM(j);
+								}
+								System.out.println("ゲームが正常に終了しました");
+								System.exit(1);
+							}
+
+							/*ゲームが続くことの通知*/
+							for(int j=0; j<nop; j++){
+								js.sendControlMessage(true, j);
+							}
+							for(int i=0; i<nop; i++){
+								js.sendLog(tmps, i);
+							}
+							/*ターン終了*/
+							break;
+						}
+					}
+
+					/*アクティブプレイヤーを交代*/
+					acplayer = (acplayer + 1) % nop;
+					while( !isLiving[acplayer] ){
+						acplayer = (acplayer + 1) % nop;
+					}
+
+					/*改行を入れておく*/
+					for(int i=0; i<nop; i++){
+						js.sendLog("", i);
+					}
+				}
+
+			}catch(IOException ioe){
+				System.out.println("Connection broken : "+ ioe);
+				System.exit(-1);
+			}
+		}catch(IOException ioe){
+			System.out.println("Connection broken : "+ ioe);
+			System.exit(-1);
+		}
+	}
+
+	/**
+	 * 入力の序数表現を返すメソッド
+	 * @param[in] base
+	 * @return
+	 */
+	public static String ordinal(int base){
+		/*String rets;
+		if(base <= 2){
+			if(base <= 1){
+				if(base <= 0) rets = "";
+				else rets = "1st";
+			}else{
+				rets = "2nd";
+			}
+		}else{
+			if(base == 3) rets = "3rd";
+			else rets = base +"th";
+		}
+		return rets;*/
+
+		return base +"番目";
+	}
+
+	public static void main(String args[]){
+		Game g = new Game();
+		g.mainloop();
+	}
+}
