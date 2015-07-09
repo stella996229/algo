@@ -1,0 +1,103 @@
+package alugoplus;
+
+import java.util.Arrays;
+import java.util.Random;
+
+public class CardStack {
+
+	/**数字カードのスタック*/
+	private Card[] sc_stack;
+
+	/**数字カードの総枚数*/
+	int nosc;
+	/**山札から引かれた数字カードの枚数*/
+	int gcsptr = 0;
+
+	/**マジックカードの総枚数*/
+	int nomc;
+
+	/**マジックカードの位置を記録したスタック*/
+	private int[] mc_stack;
+	/**引かれたマジックカードの枚数*/
+	int mcsptr = 0;
+
+	/**
+	 * 山札を設定する関数、カードの色の種類といくつの数字を使うかを受け取って
+	 * それらの組み合わせのすべてを山札に収めていく
+	 *
+	 * @param nocolor[in] 色の数
+	 * @param nonum[in] 数字の種類
+	 * @param nomc[in] マジックカードの枚数
+	 * @param total_fc[in] 初期手札の合計枚数
+	 */
+	private void setCardStack(int nocolor, int nonum, int tnomc, int total_fc){
+		nosc = nocolor*nonum;
+		nomc = tnomc;
+		sc_stack = new Card[nosc];
+		mc_stack = new int[nomc];
+
+		/*現在時刻を用いてシード値を設定*/
+		Random rnd = new Random( System.currentTimeMillis() );
+
+		/*cs[]のどこにカードを入れるかを決定する*/
+		int tmp1;
+
+		/**** 山札の生成 ****/
+		for(int i=0; i<nocolor; i++){
+			for(int j=0; j<nonum; j++){
+				tmp1 = rnd.nextInt(nosc);
+
+				/*ランダム位置にカードを埋めていく*/
+				while(sc_stack[tmp1] != null){
+					tmp1++;
+					if(tmp1 == nosc) tmp1=0;
+				}
+
+				sc_stack[tmp1] = new Card(i, j);
+			}
+		}
+
+		/**** マジックカードの位置の生成 ****/
+		for(int i = 0; i < nomc; i++){
+			mc_stack[i] = rnd.nextInt(nosc - total_fc+1) + total_fc;
+		}
+
+		Arrays.sort(mc_stack);
+
+		/**** マジックカードの生成終了 ****/
+	}
+
+	protected Card getCard() throws csEmptyException{
+		if(gcsptr == nosc) throw new csEmptyException();
+
+		if(mcsptr != nomc){
+			if(gcsptr == mc_stack[mcsptr]){
+				Card magic_card = new Card(Card.PURPLE, 0);
+				mcsptr++;
+				return magic_card;
+			}
+		}
+
+		return sc_stack[gcsptr++];
+	}
+
+	/**
+	 * 次のカードの色を返す関数、次のカードがない場合はEMPTYを投げる
+	 * @return 次のカードの色
+	 */
+	protected int checkNextCardsColor(){
+		if(gcsptr + mcsptr >= nosc + nomc) return Card.EMPTY;
+
+		if(mcsptr != nomc){
+			if(gcsptr == mc_stack[mcsptr]){
+				return Card.PURPLE;
+			}
+		}
+
+		return sc_stack[gcsptr].color;
+	}
+
+	protected CardStack(int nocolor, int nonum, int nomc, int total_fc){
+		setCardStack(nocolor, nonum, nomc, total_fc);
+	}
+}
