@@ -1,0 +1,635 @@
+package alugoplus;
+
+import java.io.IOException;
+import java.util.ArrayList;
+
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.layout.GridData;
+import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.layout.RowData;
+import org.eclipse.swt.layout.RowLayout;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.List;
+import org.eclipse.swt.widgets.Shell;
+
+public class Player {
+	/**プレイヤーの人数*/
+	static int nop;
+	/**使用するカードの色の種類*/
+	static int nocolor;
+	/**使用するカードの数字がnonum種類*/
+	static int nonum;
+
+	/**山札から引かれた数字カードの枚数*/
+	static int gcsptr = 0;
+
+	/**マジックカードの総枚数*/
+	static int nomc;
+	/**引かれたマジックカードの枚数*/
+	static int mcsptr;
+
+	/**インスタンスのプレイヤー番号、0~nop-1*/
+	static int pn=0;
+
+	/**アクティブプレイヤー*/
+	static int acplayer;
+
+	/**山札の次のカードの色*/
+	static int ncscolor;
+
+	static Card[][] hand;
+
+	/**hand[][]のどこまでカードが入っているかを示し、ソート範囲を制限する 0~入っている枚数-1*/
+	static int[] handptr;
+
+	/**ゲームの進行状況を記録する配列*/
+	static ArrayList<String> log = new ArrayList<String>();
+
+	static Shell mainWindow;
+
+	/**
+	 * プレイヤー視点で手札を表示する<br>
+	 * "your hand:"<br>
+	 * myprint();
+	 * "player 0's hand"<br>
+	 * otprint();<br>
+	 * ...
+	 */
+	static void showHands(){
+
+		for(int i=0; i<nop; i++){
+			if( gameWindow[i] != null ) gameWindow[i].dispose();
+			gameWindow[i] = new Shell(display, SWT.ON_TOP | SWT.TITLE | SWT.RESIZE);
+			gameWindow[i].setText("プレイヤー"+ i +"の手札");
+		}
+		
+		Button push;
+		
+		for(int i=0; i<nop; i++){
+			GridLayout gridLayout = new GridLayout(8, false);
+			gridLayout.horizontalSpacing = 5;
+			gridLayout.verticalSpacing = 5;
+			gameWindow[i].setBounds(600, 20+i*200, 1000, 80);
+			gameWindow[i].setLayout(gridLayout);
+
+			boolean flag = (i == pn);
+
+			Image image = new Image(display, 30, 30);
+			GC gc;
+
+			for(int j=0; j <= handptr[i]; j++){
+				push= new Button(gameWindow[i], SWT.PUSH);
+				//push.setText( hand[i][j].retColor() +":"+ hand[i][j].retNumber(flag) );
+
+				gc = new GC(image);
+				gc.setBackground(Card.rBCCode(hand[i][j].color));
+				gc.fillRectangle(0, 0, 30, 30);
+
+				gc.setForeground(Card.rFCCode(hand[i][j].color));
+				if(flag) gc.drawText( hand[i][j].retNumber(flag), 2, 10);
+				else gc.drawText( hand[i][j].retNumber(flag), 10, 10);
+
+				gc.dispose();
+				push.setImage(image);
+
+				push.addSelectionListener(new CheckCP(i, j));
+
+				push.setLayoutData(new GridData());
+			}
+			gameWindow[i].pack();
+			gameWindow[i].open();
+		}
+
+		/*既にウィンドウが開いていたら閉じる*/
+		if(mainWindow != null) mainWindow.dispose();
+		mainWindow = new Shell(display, SWT.ON_TOP | SWT.TITLE | SWT.RESIZE);
+		mainWindow.setText("山札の状態");
+		mainWindow.setLayout(new RowLayout());
+
+		mainWindow.setBounds(350, 50, 100, 100);
+
+		Label label = new Label(mainWindow, SWT.NONE);
+		label.setText(
+				"色の種類：" +nocolor +"、数字の種類："+ nonum + "\n"+
+				"行動中のプレイヤー:"+ acplayer + "\n"+
+				"次に引かれるカードの色:"+ Card.retColor(ncscolor) +"\n"+
+				"数字カードの残り枚数:" + (nocolor*nonum - gcsptr) +"\n"+
+				"マジックカードの残り枚数:" + (nomc - mcsptr)
+		);
+
+		mainWindow.pack();
+		mainWindow.open();
+	}
+
+	/** logの中身を表示するメソッド
+	 * @param[in] log
+	 */
+	static void printLog(){
+		if(logWindow != null) logWindow.dispose();
+		logWindow = new Shell(display, SWT.ON_TOP | SWT.TITLE | SWT.RESIZE);
+		logWindow.setText("プレイヤーの行動履歴");
+
+		RowLayout rowlayout = new RowLayout(SWT.VERTICAL);
+		logWindow.setLayout(rowlayout);
+		logWindow.setBounds(20, 200, 150, 200);
+
+		List list = new List(logWindow, SWT.V_SCROLL);
+
+		list.add("最新の行動");
+		for(int i=log.size()-1; i>=0; i--) list.add(log.get(i));
+		list.add("最も古い行動");
+		logWindow.pack();
+		logWindow.open();
+
+	}
+
+	/**
+	 * 相手のカードを推理するメソッド。
+	 * 推理を送信して終了する。
+	 */
+	static void detectHand(){
+		/**ターゲットのプレイヤー。プレイヤー番号と等価*/
+		int tplayer=0;
+
+		/**ターゲットのカード。*/
+		int tcard=0;
+
+		/**推理する数字。0からnonum-1まで。*/
+		int dnumber=0;
+
+		for(;;){
+			getCardPlace();
+			tplayer = retvCP[0];
+			tcard = retvCP[1];
+			if(tplayer == pn){
+				showMessage("ほかのプレイヤーの裏向きのカードを選んでください");
+			}else break;
+		}
+
+		dnumber = getDetectNumber();
+		/* end i/o */
+
+		/* send message */
+		JabberClient.sendDetection(tplayer, tcard, dnumber);
+	}
+
+
+
+	public static void main(String[] args){
+		
+		display = new Display();
+		
+		JabberClient.startConnection();
+		if(pn < nop-1) showMessage("プレイヤーを待っています... (あと"+ (nop-1-pn) +"人)");
+		
+		JabberClient.initialize();
+		
+		gameWindow = new Shell[nop];
+		
+		/*ゲームのセッティングが終了*/
+		showMessage("プレイヤーが集まりました");
+		
+		/*プレイヤー番号を表示*/
+		try {
+			JabberClient.getLog();
+			printLog();
+		} catch (IOException e) {
+			// TODO 自動生成された catch ブロック
+			e.printStackTrace();
+			System.exit(-1);
+		}
+
+		boolean cflag;
+
+		try{
+			for(;;){
+				/*山札が残っているかどうか*/
+				cflag = JabberClient.getCM();
+				if( !cflag ) throw new csEmptyException();
+
+				/**** 通常のゲーム処理 ****/
+				JabberClient.dataDistribution();
+				showHands();
+
+				if(pn == acplayer){
+					/**** 行動処理 ****/
+					cflag = JabberClient.getCM();
+
+					/*引いたカードの種類で分岐*/
+					if(cflag){
+						/**** 数字カードの場合 ****/
+
+						Card tmpc = JabberClient.getCardData();
+						String tmps = "あなたが引いたカードは"+ tmpc.retColor() +"の"
+						+ tmpc.number +"です";
+						showMessage(tmps);
+						log.add(tmps);
+
+						showMessage("推理するカードを選んでください");
+
+						for(;;){
+
+							detectHand();
+
+							/*推理の内容を受信*/
+							JabberClient.getLog();
+
+							/*推理が正解かどうかのメッセージ*/
+							JabberClient.getLog();
+							printLog();
+
+							/*メッセージa、推理が正解かどうか*/
+							cflag = JabberClient.getCM();
+							if(cflag){
+
+								/*ゲームが続いているかどうか*/
+								cflag = JabberClient.getCM();
+								if( !cflag ){
+									/*ゲーム終了*/
+									finishGame();
+								}
+
+								boolean tmpb = conAttack();
+								JabberClient.sendControlMessage(tmpb);
+
+								/*メッセージb、推理を続けるかどうか*/
+								cflag = JabberClient.getCM();
+								if(cflag){
+									JabberClient.getLog();
+									printLog();
+
+									JabberClient.dataDistribution();
+									showHands();
+
+									continue;
+								}else{
+									JabberClient.getLog();
+									JabberClient.getLog();
+									printLog();
+									break;
+								}
+							}else{
+								/*推理失敗時*/
+
+								/*メッセージa*/
+								JabberClient.getLog();
+								printLog();
+								break;
+							}
+						}
+					}else{
+						/*マジックカードを引いた場合*/
+						showMessage("マジックカードを引きました、調べるカードを選んでください");
+						int[] retv;
+						for(;;){
+							retv = getCardPlace();
+
+							if(retv[0] == pn){
+								showMessage("他のプレイヤーのカードを選んでください");
+							}else if(hand[retv[0]][retv[1]].isopen){
+								showMessage("裏向きのカードを選んでください");
+							}else break;
+						}
+						JabberClient.sendMazic(retv[0], retv[1]);
+
+						JabberClient.getLog();
+						JabberClient.getLog();
+						printLog();
+					}
+				}else{
+					/**** 待機処理 ****/
+					cflag = JabberClient.getCM();
+
+					/*引いたカードの種類で分岐*/
+					if(cflag){
+						for(;;){
+							/*推理の内容を受信*/
+							JabberClient.getLog();
+
+							/*推理が正解かどうかのメッセージ*/
+							JabberClient.getLog();
+							printLog();
+
+							/*メッセージa、推理が正解かどうか*/
+							cflag = JabberClient.getCM();
+							if(cflag){
+
+								/*ゲームが続いているかどうか*/
+								cflag = JabberClient.getCM();
+								if( !cflag ){
+									/*ゲーム終了*/
+									finishGame();
+								}
+								/*メッセージb、推理を続けるかどうか*/
+								cflag = JabberClient.getCM();
+								if(cflag){
+									JabberClient.getLog();
+									printLog();
+
+									JabberClient.dataDistribution();
+									showHands();
+
+									continue;
+								}else{
+									JabberClient.getLog();
+									JabberClient.getLog();
+									printLog();
+									break;
+								}
+							}else{
+								/*推理失敗時*/
+								JabberClient.getLog();
+								printLog();
+								break;
+							}
+						}
+					}else{
+						/*マジックカードが引かれた場合*/
+						log.add("プレイヤー"+ acplayer +"がマジックカードを引きました");
+					}
+
+				}
+
+				/*改行を入れておく*/
+				JabberClient.getLog();
+
+			}
+		}catch(csEmptyException e){
+			/**** 山札がない場合の処理 ****/
+
+			try{
+				for(;;){
+					JabberClient.dataDistribution();
+					showHands();
+
+					if(pn == acplayer){
+						showMessage("推理に失敗した時に表にするカードを選んでください");
+						int[] retv;
+
+						for(;;){
+							retv = getCardPlace();
+							if(retv[0] != pn){
+								showMessage("自分のカードを選んでください");
+							}else if(hand[retv[0]][retv[1]].isopen){
+								showMessage("裏向きのカードを選んでください");;
+							}else break;
+						}
+
+						/*メッセージcc*/
+						JabberClient.sendMazic(retv[0], retv[1]);
+
+						showMessage("推理するカードを選んでください");
+						for(;;){
+							detectHand();
+
+							/*推理の内容を受信*/
+							JabberClient.getLog();
+
+							/*推理が正解かどうかのメッセージ*/
+							JabberClient.getLog();
+							printLog();
+
+							/*メッセージa、推理が正解かどうか*/
+							cflag = JabberClient.getCM();
+							if(cflag){
+
+								/*ゲームが続いているかどうか*/
+								cflag = JabberClient.getCM();
+								if( !cflag ){
+									/*ゲーム終了*/
+									finishGame();
+								}
+
+								boolean tmpb = conAttack();
+								JabberClient.sendControlMessage(tmpb);
+
+								/*メッセージb、推理を続けるかどうか*/
+								cflag = JabberClient.getCM();
+								if(cflag){
+									JabberClient.getLog();
+									printLog();
+
+									JabberClient.dataDistribution();
+									showHands();
+
+									continue;
+								}else{
+									JabberClient.getLog();
+									printLog();
+									break;
+								}
+							}else{
+								/*推理失敗時*/
+
+								/*ゲームが続いているかどうか*/
+								cflag = JabberClient.getCM();
+								if( !cflag ){
+									/*ゲーム終了*/
+									finishGame();
+								}
+
+								JabberClient.getLog();
+								printLog();
+								break;
+							}
+						}
+					}else{
+						/**** 待機処理 ****/
+
+						for(;;){
+							/*推理の内容を受信*/
+							JabberClient.getLog();
+
+							/*推理が正解かどうかのメッセージ*/
+							JabberClient.getLog();
+							printLog();
+
+							/*メッセージa、推理が正解かどうか*/
+							cflag = JabberClient.getCM();
+							if(cflag){
+								/*ゲームが続いているかどうか*/
+								cflag = JabberClient.getCM();
+								if( !cflag ){
+									/*ゲーム終了*/
+									finishGame();
+								}
+
+								/*メッセージb、推理を続けるかどうか*/
+								cflag = JabberClient.getCM();
+								if(cflag){
+									JabberClient.getLog();
+									printLog();
+
+									JabberClient.dataDistribution();
+									showHands();
+
+									continue;
+								}else{
+									JabberClient.getLog();
+									printLog();
+									break;
+								}
+							}else{
+								/*推理失敗時*/
+
+								/*ゲームが続いているかどうか*/
+								cflag = JabberClient.getCM();
+								if( !cflag ){
+									/*ゲーム終了*/
+									finishGame();
+								}
+
+								JabberClient.getLog();
+								printLog();
+								break;
+							}
+						}
+
+					}
+					/*改行を入れておく*/
+					JabberClient.getLog();
+				}
+			}catch(IOException ioe){
+				System.out.println("connection broken : "+ ioe);
+				System.exit(-1);
+			}
+		}catch(IOException ioe){
+			System.out.println("connection broken : "+ ioe);
+			System.exit(-1);
+		}
+	}
+
+
+	private static void finishGame() throws IOException{
+		JabberClient.getLog();
+		JabberClient.getLog();
+		showMessage( log.get(log.size()-2) );
+		showMessage( log.get(log.size()-1) );
+
+		JabberClient.sendControlMessage(true);
+
+		JabberClient.finishConnection();
+
+		display.dispose();
+		System.exit(1);
+	}
+
+
+	static Display display;
+	static Shell logWindow;
+	static Shell messageWindow;
+	static Shell dnWindow;
+
+	/**
+	 * 引数の文字列をボタンとして表示するメソッド。
+	 * ボタンが押されるとクローズ
+	 * @param string
+	 */
+	public static void showMessage(String string) {
+		messageWindow = new Shell(display, SWT.ON_TOP | SWT.RESIZE);
+
+		messageWindow.setText("");
+		RowLayout rowlayout = new RowLayout(SWT.VERTICAL);
+		messageWindow.setLayout(rowlayout);
+
+		Button push = new Button(messageWindow, SWT.PUSH);
+		push.setText(string);
+		push.addSelectionListener(new CheckM());
+		push.setLayoutData(new RowData());
+		messageWindow.pack();
+		messageWindow.open();
+
+		while( !messageWindow.isDisposed() ){
+			display.readAndDispatch();
+			display.sleep();
+		}
+	}
+
+
+	static Shell[] gameWindow;
+
+	static boolean isclicked;
+
+	public static int[] retvCP;
+	/**
+	 * カードのhand[][]内での位置を返すメソッド。
+	 * [i, j] -> hand[i][j]
+	 * @return
+	 */
+	public static int[] getCardPlace() {
+		isclicked = false;
+
+		while( !isclicked ){
+			display.readAndDispatch();
+			display.sleep();
+		}
+		return retvCP;
+	}
+
+	public static int retDN;
+
+	public static int getDetectNumber(){
+		dnWindow = new Shell(display, SWT.ON_TOP | SWT.RESIZE | SWT.TITLE);
+		dnWindow.setText("数字はなんだと推理しますか？");
+
+		RowLayout rowlayout = new RowLayout(SWT.VERTICAL);
+		dnWindow.setLayout(rowlayout);
+
+		dnWindow.setBounds(450, 200, 150, 200);
+
+		List list = new List(dnWindow, SWT.V_SCROLL);
+
+		for(int i=0; i<nonum; i++) list.add( Integer.toString(i));
+
+		list.addSelectionListener(new CheckDN());
+
+		dnWindow.pack();
+		dnWindow.open();
+
+		while( !dnWindow.isDisposed() ){
+			display.readAndDispatch();
+			display.sleep();
+		}
+		return retDN;
+	}
+
+
+	public static boolean retb;
+	/**
+	 * Yes, Noを聞くメソッド。
+	 * @return
+	 */
+	public static boolean conAttack() {
+
+		messageWindow = new Shell(display, SWT.ON_TOP | SWT.RESIZE | SWT.TITLE);
+		messageWindow.setText("推理を続けますか？");
+
+		RowLayout rowlayout = new RowLayout(SWT.VERTICAL);
+		rowlayout.spacing = 30;
+		messageWindow.setLayout(rowlayout);
+
+		Button push1 = new Button(messageWindow, SWT.PUSH);
+		push1.setText("続ける");
+		push1.addSelectionListener(new CheckTF(true));
+		push1.setLayoutData(new RowData(120, 50));
+
+		Button push2 = new Button(messageWindow, SWT.PUSH);
+		push2.setText("やめる");
+		push2.addSelectionListener(new CheckTF(false));
+		push2.setLayoutData(new RowData(120, 50));
+
+		messageWindow.pack();
+		messageWindow.open();
+
+		while( !messageWindow.isDisposed() ){
+			display.readAndDispatch();
+			display.sleep();
+		}
+
+		return retb;
+	}
+}
