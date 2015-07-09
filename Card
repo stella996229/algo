@@ -1,0 +1,276 @@
+package alugoplus;
+
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Color;
+
+
+public class Card implements Comparable<Card>{
+	int color;
+	int number;
+	/** カードが公開されている時true*/
+	boolean isopen;
+
+	static final int BLACK = 0;
+	static final int WHITE = 1;
+	static final int RED = 2;
+	static final int CYAN = 3;
+	
+	static final int YELLOW = 4;
+	static final int GREEN =  5;
+	static final int DARK_GREEN = 6;
+	static final int DARK_BLUE = 7;
+	static final int DARK_MAGENTA = 8;
+
+	/**マジックカード用に確保された色*/
+	static final int PURPLE = 9;
+	
+	/**山札にカードが残ってないとき用の色*/
+	static final int EMPTY = 10;
+
+	Card(int c, int n){
+		color = c;
+		number = n;
+		isopen = false;
+	}
+	/**
+	 * 色をStringで返すメソッド
+	 * @return
+	 */
+	/*String retColor(){
+		if(color == BLACK) return "BLACK";
+		else if(color == WHITE) return "WHITE";
+		else if(color == RED) return "RED";
+		else if(color == CYAN) return "CYAN";
+		else if(color == PURPLE) return "MAGENTA";
+		else return "EMPTY";
+	}*/
+	
+	/**
+	 * 色をStringで返すメソッド
+	 * @return
+	 */
+	static String retColor(int c){
+		switch(c){
+			case BLACK:
+				return "黒";
+			case WHITE:
+				return "白";
+			case RED:
+				return "赤";
+			case CYAN:
+				return "青";
+			case PURPLE:
+				return "紫";
+			case YELLOW:
+				return "黄";
+			case GREEN:
+				return "緑";
+			case DARK_GREEN:
+				return "深緑";
+			case DARK_BLUE:
+				return "紺青";
+			case DARK_MAGENTA:
+				return "深紫";
+			default:
+				return "なし";
+		}
+	}
+	
+	/**
+	 * 色をStringで返すメソッド
+	 * @return
+	 */
+	String retColor(){
+		switch(color){
+			case BLACK:
+				return "黒";
+			case WHITE:
+				return "白";
+			case RED:
+				return "赤";
+			case CYAN:
+				return "青";
+			case PURPLE:
+				return "紫";
+			case YELLOW:
+				return "黄";
+			case GREEN:
+				return "緑";
+			case DARK_GREEN:
+				return "深緑";
+			case DARK_BLUE:
+				return "紺青";
+			case DARK_MAGENTA:
+				return "深紫";
+			default:
+				return "なし";
+		}
+	}
+	
+	/**
+	 * return Background Color Code
+	 * @param c
+	 * @return
+	 */
+	static Color rBCCode(int c){
+		switch(c){
+			case BLACK:
+				return Player.display.getSystemColor(SWT.COLOR_BLACK);
+			case WHITE:
+				return Player.display.getSystemColor(SWT.COLOR_WHITE);
+			case RED:
+				return Player.display.getSystemColor(SWT.COLOR_RED);
+			case CYAN:
+				return Player.display.getSystemColor(SWT.COLOR_CYAN);
+			case PURPLE:
+				return Player.display.getSystemColor(SWT.COLOR_MAGENTA);
+			case YELLOW:
+				return Player.display.getSystemColor(SWT.COLOR_YELLOW);
+			case GREEN:
+				return Player.display.getSystemColor(SWT.COLOR_GREEN);
+			case DARK_GREEN:
+				return Player.display.getSystemColor(SWT.COLOR_DARK_GREEN);
+			case DARK_BLUE:
+				return Player.display.getSystemColor(SWT.COLOR_DARK_BLUE);
+			case DARK_MAGENTA:
+				return Player.display.getSystemColor(SWT.COLOR_DARK_MAGENTA);
+			default:
+				return Player.display.getSystemColor(SWT.COLOR_GRAY);
+		}
+	}
+	
+	/**
+	 * return Foreground Color Code
+	 * @param c
+	 * @return
+	 */
+	static Color rFCCode(int c){
+		switch(c){
+		case BLACK:
+			return Player.display.getSystemColor(SWT.COLOR_WHITE);
+		case WHITE:
+			return Player.display.getSystemColor(SWT.COLOR_BLACK);
+		case RED:
+			return Player.display.getSystemColor(SWT.COLOR_BLACK);
+		case CYAN:
+			return Player.display.getSystemColor(SWT.COLOR_BLACK);
+		case PURPLE:
+			return Player.display.getSystemColor(SWT.COLOR_BLACK);
+		case YELLOW:
+			return Player.display.getSystemColor(SWT.COLOR_BLACK);
+		case GREEN:
+			return Player.display.getSystemColor(SWT.COLOR_BLACK);
+		case DARK_GREEN:
+			return Player.display.getSystemColor(SWT.COLOR_WHITE);
+		case DARK_BLUE:
+			return Player.display.getSystemColor(SWT.COLOR_WHITE);
+		case DARK_MAGENTA:
+			return Player.display.getSystemColor(SWT.COLOR_WHITE);
+		default:
+			return Player.display.getSystemColor(SWT.COLOR_BLACK);
+	}
+	}
+	
+	/**
+	 * インスタンスの情報を以下の形で表示する<br>
+	 * "Br0"<br>
+	 * "ope"<br>
+	 * color == 0:Br, 1:Wh, 2:Re, 3:Cy
+	 */
+	void myprint(){
+		String colorcode = "", open = "";
+		switch( color ){
+			case BLACK:
+				colorcode = "Br";
+				break;
+			case WHITE:
+				colorcode = "Wh";
+				break;
+			case RED:
+				colorcode = "Re";
+				break;
+			case CYAN:
+				colorcode = "Cy";
+				break;
+		}
+
+		if(isopen) open = "ope";
+		else open = "clo";
+
+		System.out.println(colorcode + number);
+		System.out.println(open);
+	}
+
+	/**
+	 * 他人のカードの情報を以下の形で表示する<br>
+	 * "Br0" or "BR?"<br>
+	 * "ope"<br>
+	 * color == 0:Br, 1:Wh, 2:Re, 3:Cy
+	 */
+	void otprint(){
+		String colorcode = "", open = "";
+		switch( color ){
+			case BLACK:
+				colorcode = "Br";
+				break;
+			case WHITE:
+				colorcode = "Wh";
+				break;
+			case RED:
+				colorcode = "Re";
+				break;
+			case CYAN:
+				colorcode = "Cy";
+				break;
+		}
+
+		if(isopen) open = "ope";
+		else open = "clo";
+
+		System.out.println(colorcode + (isopen ? number : "?"));
+		System.out.println(open);
+	}
+
+	boolean equals(Card c){
+		boolean retv = false;
+		if(this.compareTo(c) == 0) retv = true;
+
+		return retv;
+	}
+
+	/**
+	 * カードの大小比較メソッド。
+	 * @param c 比較対象のカード
+	 * @return 呼び出し元 < 対象のカード : -n
+	 */
+	@Override
+	public int compareTo(Card c) {
+		int retv=0;
+		if(this.number == c.number){
+			retv = this.color - c.color;
+		}else{
+			retv = this.number - c.number;
+		}
+		return retv;
+	}
+	
+	/**
+	 * 
+	 * @param flag trueならisopen = falseでも表示
+	 * @return
+	 */
+	public String retNumber(boolean flag) {
+		if(flag){
+			String tmps = "裏";
+			if(isopen) tmps = "表";
+			return number + ":"+ tmps;
+		}else{
+			if(isopen){
+				return Integer.toString(number);
+			}else{
+				return "?";
+			}
+		}
+		
+	}
+}
