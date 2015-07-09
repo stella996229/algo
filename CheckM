@@ -1,0 +1,16 @@
+package alugoplus;
+
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
+
+public class CheckM implements SelectionListener{
+	public void widgetSelected(SelectionEvent se){
+		Player.messageWindow.close();
+	}
+
+	@Override
+	public void widgetDefaultSelected(SelectionEvent arg0) {
+		
+	}
+	
+}
