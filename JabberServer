@@ -1,0 +1,262 @@
+package alugoplus;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.layout.RowData;
+import org.eclipse.swt.layout.RowLayout;
+import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Shell;
+
+/*Echo every input data from client*/
+
+public class JabberServer{
+	public static final int PORT = 8080; //set port number
+
+	Socket[] players;
+	Game g;
+	BufferedReader[] in;
+	PrintWriter[] out;
+	
+	Display display;
+	Shell messageWindow;
+	
+	/**
+	 * 各プレイヤーとの接続を確立し、ポート番号を割り振る
+	 * @throws IOException
+	 */
+	public void startConnection() throws IOException{
+		/**接続を確立するための仮ホスト*/
+		ServerSocket vh = new ServerSocket(PORT);
+
+		InetAddress host = InetAddress.getLocalHost();
+		display = new Display();
+		showMessage( "Host Name:" + host.getHostName() );
+		
+		players = new Socket[g.nop];
+		in = new BufferedReader[g.nop];
+		out = new PrintWriter[g.nop];
+		/*通信ポートを各プレイヤーに個別に割り振る*/
+		for(int i = 0; i < g.nop; i++){
+			try{
+				
+				players[i] = vh.accept();
+				in[i] = new BufferedReader(
+								new InputStreamReader(
+										players[i].getInputStream()));
+				
+				out[i] = new PrintWriter(
+						new BufferedWriter(
+								new OutputStreamWriter(
+										players[i].getOutputStream())), true);
+				in[i].readLine();
+				showMessage("Connection accepted: " + players[i]);
+				out[i].println(i);
+				
+			}catch(IOException ioe){
+				System.out.println(ioe);
+				i--;
+			}
+		}
+		display.close();
+		vh.close();
+	}
+
+	/**
+	 * Playerを初期化するデータを送るメソッド。
+	 * カードの色の数、プレイヤー数、カードの番号の種類、マジックカードの総数の順に
+	 * " "で区切って転送
+	 */
+	public void initialize(){
+		String ini = g.nocolor +" "+ g.nop +" "+ g.nonum +" "+ g.nomc;
+		for(int i=0; i<g.nop; i++){
+			out[i].println(ini);
+		}
+	}
+
+	/**
+	 * 手札、引かれた数字カードの枚数、引かれたマジックカードの枚数、
+	 * 山札の次のカードの色、アクティブプレイヤーを送信。
+	 * 手札は color +" "+ number +" "+ isopenで1枚ずつ送信し、最後は"END"
+	 */
+	public void dataDistribution(){
+		Card fcard;
+		for(int i = 0; i < g.nop; i++){
+			for(int j = 0; (fcard = g.hand[i][j]) != null; j++){
+				for(int k = 0; k < g.nop; k++){
+					sendCardData(fcard, k);
+				}
+			}
+
+			for(int k = 0; k < g.nop; k++){
+				out[k].println("END");
+			}
+		}
+
+		String tmps = g.cs.gcsptr +" "+ g.cs.mcsptr +" "+ g.cs.checkNextCardsColor() +" "+ g.acplayer;
+		for(int k = 0; k < g.nop; k++){
+			out[k].println(tmps);
+		}
+
+		tmps = Integer.toString( g.handptr[0] );
+		for(int i=1; i<g.nop; i++) tmps = tmps + " "+ g.handptr[i];
+		for(int i=0; i<g.nop; i++){
+			out[i].println(tmps);
+		}
+	}
+
+	/**
+	 * 推理を受け取るメソッド。
+	 * @param p 誰からの推理を受け取るか
+	 * @return　[i, j, dnum] -> hand[i][j] = dnum
+	 * @throws IOException
+	 */
+	public int[] getDetection(int p) throws IOException{
+		String str = in[p].readLine();
+		int[] retv = new int[3];
+		String[] tmp = str.split(" ", 3);
+
+		retv[0] = Integer.parseInt(tmp[0]);
+		retv[1] = Integer.parseInt(tmp[1]);
+		retv[2] = Integer.parseInt(tmp[2]);
+
+		return retv;
+	}
+
+
+	/**
+	 * マジックカードでチェックするカードを受け取るメソッド。
+	 * @param p 誰からの推理を受け取るか
+	 * @return　[i, j] -> hand[i][j]
+	 * @throws IOException
+	 */
+	public int[] getMazic(int p) throws IOException{
+		String str = in[p].readLine();
+		int[] retv = new int[2];
+		String[] tmp = str.split(" ", 2);
+
+		retv[0] = Integer.parseInt(tmp[0]);
+		retv[1] = Integer.parseInt(tmp[1]);
+
+		return retv;
+	}
+
+
+	/**
+	 * 推理を共有するメソッド、プロトコルは i +" "+ j +" "+ dnum
+	 * @param detv [i, j, dnum] -> hand[i][j] = dnum
+	 * @param p 送り先プレイヤー
+	 * @throws IOException
+	 */
+	public void sendDetection(int[] detv, int p) throws IOException{
+		String str = detv[0] + " "+ detv[1] + " "+ detv[2];
+		out[p].println(str);
+	}
+
+	/**
+	 * ログを送信するメソッド。
+	 * 1:1通信
+	 * @param[in] str 送信されるログ
+	 * @param[in] p 送信先のプレイヤー
+	 * @throws IOException
+	 */
+	public void sendLog(String str, int p) throws IOException{
+		out[p].println(str);
+	}
+
+	/**
+	 * 制御メッセージを送るためのメソッド。
+	 * 1:1通信
+	 * @param[in] tf 送信する論理値
+	 * @param[in] p 送信先のプレイヤー
+	 */
+	public void sendControlMessage(boolean tf, int p){
+		out[p].println(tf);
+	}
+
+	/**
+	 * 制御メッセージを受け取るためのメソッド。
+	 * @param[in] p 誰からのメッセージを受け取るか
+	 */
+	public boolean getCM(int p) throws IOException{
+		String str = in[p].readLine();
+		return Boolean.parseBoolean(str);
+	}
+
+	/**
+	 * カードのデータを送るためのメソッド
+	 * 1:1通信
+	 * @param[in] c 送信するカードのデータ
+	 * @param[in] p 送信先のプレイヤー
+	 */
+	public void sendCardData(Card c, int p){
+		String tmp = c.color +" "+ c.number +" "+ c.isopen;
+		out[p].println(tmp);
+	}
+
+	/**
+	 * カードのデータを受け取るメソッド。
+	 * @param p 誰のデータを受け取るか
+	 * @return 送られてきたカード
+	 * @throws IOException
+	 */
+	public Card getCardData(int p) throws IOException{
+		String str = in[p].readLine();
+		String[] tmp;
+		int tmpcnum, tmpccolor;
+		boolean tmpcopen;
+
+		tmp = str.split(" ", 3);
+
+		tmpccolor = Integer.parseInt(tmp[0]);
+		tmpcnum = Integer.parseInt(tmp[1]);
+		tmpcopen = Boolean.parseBoolean(tmp[2]);
+		Card retcard = new Card(tmpccolor, tmpcnum);
+
+		retcard.isopen = tmpcopen;
+
+		return retcard;
+	}
+
+	public JabberServer(Game ga){
+		g = ga;
+	}
+
+	public static void main(String args[]) throws IOException{
+		JabberServer js = new JabberServer(new Game());
+		js.g.initializeGame();
+		js.startConnection();
+		js.initialize();
+	}
+
+	public void finishConnection(int i) throws IOException{
+		// TODO 自動生成されたメソッド・スタブ
+		players[i].close();
+	}
+	
+	
+	
+	public void showMessage(String string) {
+		messageWindow = new Shell(display, SWT.ON_TOP | SWT.RESIZE);
+		
+		messageWindow.setText("");
+		RowLayout rowlayout = new RowLayout(SWT.VERTICAL);
+		messageWindow.setLayout(rowlayout);
+
+		Label label = new Label(messageWindow, SWT.NONE);
+		label.setText(string);
+		label.setLayoutData(new RowData());
+		messageWindow.pack();
+		messageWindow.open();
+	}
+
+}
